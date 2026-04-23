@@ -122,13 +122,22 @@ class TradingAgent:
             )
 
         signal = "BUY" if edge > 0 else "SELL"
-        size = kelly_size_usd(
-            bankroll_usd=self.bankroll_usd,
-            fair_probability=fair_probability,
-            market_probability=data.implied_probability,
-            confidence=effective_confidence,
-            risk_cfg=self.cfg.risk,
-        )
+        if signal == "BUY":
+            size = kelly_size_usd(
+                bankroll_usd=self.bankroll_usd,
+                fair_probability=fair_probability,
+                market_probability=data.implied_probability,
+                confidence=effective_confidence,
+                risk_cfg=self.cfg.risk,
+            )
+        else:
+            size = kelly_size_usd(
+                bankroll_usd=self.bankroll_usd,
+                fair_probability=1.0 - fair_probability,
+                market_probability=1.0 - data.implied_probability,
+                confidence=effective_confidence,
+                risk_cfg=self.cfg.risk,
+            )
         size *= regime.risk_multiplier
 
         return TradeDecision(

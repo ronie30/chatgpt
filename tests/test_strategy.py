@@ -42,6 +42,17 @@ def test_disagreement_penalizes_confidence():
     assert fair_a != fair_b
 
 
+def test_estimate_fair_probability_handles_empty_orderbook_depth():
+    bundle = _bundle(0.3, 0.2, 0.1)
+    bundle.orderbook.bid_depth = 0
+    bundle.orderbook.ask_depth = 0
+
+    fair, conf, _ = estimate_fair_probability(bundle, StrategyConfig())
+
+    assert 0.01 <= fair <= 0.99
+    assert 0.0 <= conf <= 1.0
+
+
 def test_lexicon_sentiment_detects_positive_and_negative():
     client = PolymarketDataClient(api_cfg=APIConfig())
     positive = client._lexicon_sentiment(["Market looks bullish and strong, big win expected"])

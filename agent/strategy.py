@@ -32,8 +32,11 @@ def _disagreement(sentiment: float, news: float, onchain: float) -> float:
 
 
 def estimate_fair_probability(data: DataBundle, cfg: StrategyConfig) -> tuple[float, float, MarketFeatures]:
-    orderflow_signal = (data.orderbook.bid_depth - data.orderbook.ask_depth) / (
-        data.orderbook.bid_depth + data.orderbook.ask_depth
+    total_depth = data.orderbook.bid_depth + data.orderbook.ask_depth
+    orderflow_signal = (
+        (data.orderbook.bid_depth - data.orderbook.ask_depth) / total_depth
+        if total_depth > 0
+        else 0.0
     )
 
     signal_strength = (
