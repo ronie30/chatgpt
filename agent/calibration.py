@@ -1,17 +1,6 @@
 from dataclasses import dataclass
-import math
 
-
-def _clip_probability(value: float) -> float:
-    return max(1e-6, min(1 - 1e-6, value))
-
-
-def _sigmoid(value: float) -> float:
-    if value >= 30:
-        return 1.0
-    if value <= -30:
-        return 0.0
-    return 1.0 / (1.0 + math.exp(-value))
+from .math_utils import clip_probability, logit, sigmoid
 
 
 @dataclass
@@ -20,8 +9,9 @@ class PlattScaler:
     intercept: float = 0.0
 
     def predict(self, probability: float) -> float:
-        logit = math.log(_clip_probability(probability) / (1 - _clip_probability(probability)))
-        return _clip_probability(_sigmoid(self.slope * logit + self.intercept))
+        probability_logit = logit(probability)
+        calibrated = sigmoid(self.slope * probability_logit + self.intercept)
+        return clip_probability(calibrated)
 
 
 @dataclass
@@ -50,7 +40,7 @@ class _LogisticCalibratorTrainer:
         if positives == 0 or positives == len(outcomes):
             return PlattScaler()
 
-        logits = [math.log(_clip_probability(p) / (1 - _clip_probability(p))) for p in probabilities]
+        logits = [logit(p) for p in probabilities]
         slope = 1.0
         intercept = 0.0
 
@@ -58,11 +48,11 @@ class _LogisticCalibratorTrainer:
             grad_slope = 0.0
             grad_intercept = 0.0
             n = len(logits)
-            for logit, y in zip(logits, outcomes):
-                pred = _sigmoid((slope * logit) + intercept)
-                err = pred - y
-                grad_slope += err * logit
-                grad_intercept += err
+            for logit_value, outcome in zip(logits, outcomes):
+                prediction = sigmoid((slope * logit_value) + intercept)
+                error = prediction - outcome
+                grad_slope += error * logit_value
+                grad_intercept += error
 
             slope -= self.learning_rate * (grad_slope / n)
             intercept -= self.learning_rate * (grad_intercept / n)
@@ -83,10 +73,10 @@ def fit_regime_calibrator(
         "HIGH_VOL": ([], []),
     }
 
-    for label, prob, outcome in zip(regime_labels, raw_probabilities, outcomes):
-        probs, ys = buckets.get(label, buckets["HIGH_VOL"])
-        probs.append(prob)
-        ys.append(outcome)
+    for label, probability, outcome in zip(regime_labels, raw_probabilities, outcomes):
+        probs, labels = buckets.get(label, buckets["HIGH_VOL"])
+        probs.append(probability)
+        labels.append(outcome)
 
     low = trainer.fit(*buckets["LOW_VOL"])
     mid = trainer.fit(*buckets["MID_VOL"])

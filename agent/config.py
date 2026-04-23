@@ -33,6 +33,7 @@ class RiskConfig:
     max_drawdown_stop: float = float(os.getenv("MAX_DRAWDOWN_STOP", "0.10"))
     min_expected_value_bps: float = float(os.getenv("MIN_EXPECTED_VALUE_BPS", "40"))
     min_liquidity_score: float = float(os.getenv("MIN_LIQUIDITY_SCORE", "0.40"))
+    min_source_health: float = float(os.getenv("MIN_SOURCE_HEALTH", "0.34"))
 
 
 @dataclass
@@ -46,6 +47,45 @@ class StrategyConfig:
     prior_strength: float = float(os.getenv("PRIOR_STRENGTH", "0.55"))
     disagreement_penalty_weight: float = float(os.getenv("DISAGREEMENT_PENALTY_WEIGHT", "0.35"))
     entropy_penalty_weight: float = float(os.getenv("ENTROPY_PENALTY_WEIGHT", "0.20"))
+    disagreement_penalty_scale: float = float(os.getenv("DISAGREEMENT_PENALTY_SCALE", "0.08"))
+    entropy_penalty_scale: float = float(os.getenv("ENTROPY_PENALTY_SCALE", "0.05"))
+
+    confidence_consensus_weight: float = float(os.getenv("CONFIDENCE_CONSENSUS_WEIGHT", "0.45"))
+    confidence_orderflow_weight: float = float(os.getenv("CONFIDENCE_ORDERFLOW_WEIGHT", "0.30"))
+    confidence_source_health_weight: float = float(os.getenv("CONFIDENCE_SOURCE_HEALTH_WEIGHT", "0.25"))
+
+
+@dataclass
+class QualityConfig:
+    window: int = int(os.getenv("QUALITY_WINDOW", "50"))
+    min_history: int = int(os.getenv("QUALITY_MIN_HISTORY", "10"))
+    implied_z_threshold: float = float(os.getenv("QUALITY_IMPLIED_Z_THRESHOLD", "4.0"))
+    spread_z_threshold: float = float(os.getenv("QUALITY_SPREAD_Z_THRESHOLD", "4.0"))
+    depth_z_threshold: float = float(os.getenv("QUALITY_DEPTH_Z_THRESHOLD", "4.5"))
+    flatline_relative_jump_threshold: float = float(os.getenv("QUALITY_RELATIVE_JUMP_THRESHOLD", "0.25"))
+    anomaly_penalty_per_flag: float = float(os.getenv("QUALITY_ANOMALY_PENALTY", "0.25"))
+
+
+@dataclass
+class RegimeConfig:
+    spread_norm: float = float(os.getenv("REGIME_SPREAD_NORM", "0.05"))
+    spread_weight: float = float(os.getenv("REGIME_SPREAD_WEIGHT", "0.55"))
+    dispersion_weight: float = float(os.getenv("REGIME_DISPERSION_WEIGHT", "0.45"))
+    high_vol_threshold: float = float(os.getenv("REGIME_HIGH_VOL_THRESHOLD", "0.70"))
+    mid_vol_threshold: float = float(os.getenv("REGIME_MID_VOL_THRESHOLD", "0.40"))
+
+    high_vol_risk_multiplier: float = float(os.getenv("REGIME_HIGH_VOL_RISK_MULTIPLIER", "0.45"))
+    high_vol_confidence_multiplier: float = float(os.getenv("REGIME_HIGH_VOL_CONFIDENCE_MULTIPLIER", "0.85"))
+    mid_vol_risk_multiplier: float = float(os.getenv("REGIME_MID_VOL_RISK_MULTIPLIER", "0.70"))
+    mid_vol_confidence_multiplier: float = float(os.getenv("REGIME_MID_VOL_CONFIDENCE_MULTIPLIER", "0.93"))
+    low_vol_risk_multiplier: float = float(os.getenv("REGIME_LOW_VOL_RISK_MULTIPLIER", "1.0"))
+    low_vol_confidence_multiplier: float = float(os.getenv("REGIME_LOW_VOL_CONFIDENCE_MULTIPLIER", "1.0"))
+
+
+@dataclass
+class TuningConfig:
+    win_rate_bonus: float = float(os.getenv("TUNING_WIN_RATE_BONUS", "2000"))
+    no_trade_penalty: float = float(os.getenv("TUNING_NO_TRADE_PENALTY", "50"))
 
 
 @dataclass
@@ -53,3 +93,6 @@ class AgentConfig:
     api: APIConfig = field(default_factory=APIConfig)
     risk: RiskConfig = field(default_factory=RiskConfig)
     strategy: StrategyConfig = field(default_factory=StrategyConfig)
+    quality: QualityConfig = field(default_factory=QualityConfig)
+    regime: RegimeConfig = field(default_factory=RegimeConfig)
+    tuning: TuningConfig = field(default_factory=TuningConfig)

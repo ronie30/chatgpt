@@ -43,7 +43,7 @@ def tune_thresholds_rows(
             edge = fair - bundle.implied_probability
             ev_bps = edge * 10_000
 
-            if features.source_health < 0.34 or features.liquidity_score < cfg.risk.min_liquidity_score:
+            if features.source_health < cfg.risk.min_source_health or features.liquidity_score < cfg.risk.min_liquidity_score:
                 continue
             if confidence < min_conf or abs(edge) < edge_threshold or abs(ev_bps) < min_ev:
                 continue
@@ -55,7 +55,7 @@ def tune_thresholds_rows(
             pnl += ev_bps if is_win else -abs(ev_bps)
 
         win_rate = (wins / trades) if trades else 0.0
-        score = pnl + (win_rate * 2000) - (50 if trades == 0 else 0)
+        score = pnl + (win_rate * cfg.tuning.win_rate_bonus) - (cfg.tuning.no_trade_penalty if trades == 0 else 0)
 
         if score > best_score:
             best_score = score

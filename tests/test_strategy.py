@@ -1,6 +1,7 @@
-from agent.config import APIConfig, StrategyConfig
-from agent.data_sources import DataBundle, PolymarketDataClient, SourceDiagnostics
+from agent.config import StrategyConfig
+from agent.data_sources import DataBundle, SourceDiagnostics
 from agent.models import OrderBookSnapshot
+from agent.sentiment import lexicon_sentiment
 from agent.strategy import estimate_fair_probability
 
 
@@ -43,9 +44,8 @@ def test_disagreement_penalizes_confidence():
 
 
 def test_lexicon_sentiment_detects_positive_and_negative():
-    client = PolymarketDataClient(api_cfg=APIConfig())
-    positive = client._lexicon_sentiment(["Market looks bullish and strong, big win expected"])
-    negative = client._lexicon_sentiment(["This outcome looks bearish and weak, likely lose"])
+    positive = lexicon_sentiment(["Market looks bullish and strong, big win expected"])
+    negative = lexicon_sentiment(["This outcome looks bearish and weak, likely lose"])
 
     assert positive > 0
     assert negative < 0

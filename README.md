@@ -169,3 +169,10 @@ python -m agent.main --top-wallets
 ```
 
 Skor keputusan wallet dihitung secara kompleks dari kombinasi: realized PnL, Sharpe, max drawdown, win-rate, recency, consistency, dan penalti overfit (trade depth rendah).
+
+
+## Configurability Notes (Maintainability Upgrade)
+
+Versi ini memindahkan beberapa konstanta hard-coded ke konfigurasi environment: quality z-threshold, regime thresholds/multipliers, strategy penalty scale, confidence blend weights, source-health gate, dan tuning score weights.
+Selain itu, utilitas matematis kecil (`clip/sigmoid/logit/depth_imbalance`) dan helper sentiment lexicon kini dipusatkan agar konsisten lintas modul.
+

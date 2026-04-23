@@ -63,7 +63,7 @@ def run_walk_forward(
         train_outcomes: list[int] = []
         for train_bundle, train_outcome in train_slice:
             fair_train, _, train_features = estimate_fair_probability(train_bundle, cfg.strategy)
-            train_regimes.append(detect_regime(train_bundle, train_features).label)
+            train_regimes.append(detect_regime(train_bundle, train_features, cfg.regime).label)
             train_probabilities.append(fair_train)
             train_outcomes.append(train_outcome)
 
@@ -77,7 +77,7 @@ def run_walk_forward(
 
         for bundle, outcome in test_slice:
             fair, confidence, features = estimate_fair_probability(bundle, cfg.strategy)
-            regime = detect_regime(bundle, features)
+            regime = detect_regime(bundle, features, cfg.regime)
             fair_calibrated = calibrator.calibrate(regime.label, fair)
             edge = fair_calibrated - bundle.implied_probability
             ev_bps = edge * 10_000
@@ -85,7 +85,7 @@ def run_walk_forward(
             predictions.append(fair_calibrated)
             outcomes.append(outcome)
 
-            if features.source_health < 0.34 or features.liquidity_score < cfg.risk.min_liquidity_score:
+            if features.source_health < cfg.risk.min_source_health or features.liquidity_score < cfg.risk.min_liquidity_score:
                 continue
             if confidence < tuned.best_min_confidence:
                 continue

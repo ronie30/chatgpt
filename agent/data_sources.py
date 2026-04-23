@@ -7,33 +7,9 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from .config import APIConfig
+from .math_utils import clip
 from .models import OrderBookSnapshot
-
-
-POSITIVE_WORDS = {
-    "win",
-    "wins",
-    "bullish",
-    "approved",
-    "growth",
-    "up",
-    "positive",
-    "beat",
-    "strong",
-    "surge",
-}
-NEGATIVE_WORDS = {
-    "lose",
-    "loses",
-    "bearish",
-    "rejected",
-    "decline",
-    "down",
-    "negative",
-    "miss",
-    "weak",
-    "drop",
-}
+from .sentiment import lexicon_sentiment
 
 
 @dataclass
@@ -122,9 +98,9 @@ class PolymarketDataClient:
             last_trade = float(payload.get("last_trade_price") or (best_bid + best_ask) / 2)
             return (
                 OrderBookSnapshot(
-                    best_bid=max(0.01, min(0.99, best_bid)),
-                    best_ask=max(0.01, min(0.99, best_ask)),
-                    last_trade_price=max(0.01, min(0.99, last_trade)),
+                    best_bid=clip(best_bid, 0.01, 0.99),
+                    best_ask=clip(best_ask, 0.01, 0.99),
+                    last_trade_price=clip(last_trade, 0.01, 0.99),
                     bid_depth=max(0.0, bid_depth),
                     ask_depth=max(0.0, ask_depth),
                 ),
@@ -160,7 +136,7 @@ class PolymarketDataClient:
                 params={"query": market_id, "max_results": 25, "tweet.fields": "text"},
             )
             texts = [item.get("text", "") for item in payload.get("data", [])]
-            return self._lexicon_sentiment(texts), True
+            return lexicon_sentiment(texts), True
         except Exception:
             return self._rand(market_id, "twitter", -0.3, 0.3), False
 
@@ -176,7 +152,7 @@ class PolymarketDataClient:
             texts = [
                 f"{article.get('title', '')} {article.get('description', '')}" for article in payload.get("articles", [])
             ]
-            return self._lexicon_sentiment(texts), True
+            return lexicon_sentiment(texts), True
         except Exception:
             return self._rand(market_id, "news", -0.3, 0.3), False
 
@@ -225,27 +201,6 @@ class PolymarketDataClient:
         except Exception:
             return None
 
-    def _lexicon_sentiment(self, texts: list[str]) -> float:
-        if not texts:
-            return 0.0
-
-        score = 0
-        words_seen = 0
-        for text in texts:
-            for token in text.lower().split():
-                cleaned = token.strip(".,:;!?()[]{}\"'`")
-                if not cleaned:
-                    continue
-                words_seen += 1
-                if cleaned in POSITIVE_WORDS:
-                    score += 1
-                elif cleaned in NEGATIVE_WORDS:
-                    score -= 1
-
-        if words_seen == 0:
-            return 0.0
-        return max(-1.0, min(1.0, score / max(1, words_seen // 4)))
-
     def _safe_probability(self, value: Any) -> float | None:
         if value is None:
             return None
@@ -253,7 +208,7 @@ class PolymarketDataClient:
             parsed = float(value)
             if parsed > 1:
                 parsed /= 100
-            return max(0.01, min(0.99, parsed))
+            return clip(parsed, 0.01, 0.99)
         except (TypeError, ValueError):
             return None
 

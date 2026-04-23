@@ -42,13 +42,13 @@ class TradingAgent:
             failure_threshold=3,
             circuit_cooldown_sec=5.0,
         )
-        self.quality_guard = DataQualityGuard(window=50)
+        self.quality_guard = DataQualityGuard(config=self.cfg.quality)
         self.observer = observer or NullObserver()
 
     def evaluate_market(self, market_id: str) -> TradeDecision:
         data = self.client.fetch_data_bundle(market_id)
         fair_probability, confidence, features = estimate_fair_probability(data, self.cfg.strategy)
-        regime = detect_regime(data, features)
+        regime = detect_regime(data, features, config=self.cfg.regime)
         quality = self.quality_guard.assess(market_id, data)
 
         edge = fair_probability - data.implied_probability
@@ -76,7 +76,7 @@ class TradingAgent:
                 ),
             )
 
-        if features.source_health < 0.34:
+        if features.source_health < self.cfg.risk.min_source_health:
             self.observer.inc("source_health_holds")
             return TradeDecision(
                 market_id=market_id,
