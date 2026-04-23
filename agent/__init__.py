@@ -1,0 +1,1 @@
+"""Polymarket trading agent package."""
