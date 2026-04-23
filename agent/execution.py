@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import time
+from typing import Literal
 import uuid
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -11,6 +12,23 @@ from urllib.request import Request, urlopen
 from .config import APIConfig
 from .models import TradeDecision
 from .order_ledger import CSVOrderLedger, LedgerEntry, now_utc
+
+
+OrderStatus = Literal[
+    "NEW",
+    "ACCEPTED",
+    "PARTIAL_FILL",
+    "FILLED",
+    "CANCELED",
+    "REJECTED",
+    "FAILED",
+    "LIVE_DISABLED",
+    "HTTP_ERROR",
+    "NETWORK_ERROR",
+    "TIMEOUT",
+    "UNKNOWN",
+    "CIRCUIT_OPEN",
+]
 
 
 @dataclass
@@ -26,7 +44,7 @@ class OrderRequest:
 class ExecutionResult:
     accepted: bool
     order_id: str | None
-    status: str
+    status: OrderStatus
     message: str
     timestamp_utc: str
 
@@ -35,13 +53,20 @@ class OrderExecutor:
     def submit_order(self, request: OrderRequest) -> ExecutionResult:
         raise NotImplementedError
 
+    def cancel_order(self, order_id: str) -> ExecutionResult:
+        return ExecutionResult(False, order_id, "UNKNOWN", "cancel_order belum diimplementasi", now_utc())
+
+    def get_order_status(self, order_id: str) -> ExecutionResult:
+        return ExecutionResult(False, order_id, "UNKNOWN", "get_order_status belum diimplementasi", now_utc())
+
 
 class PaperExecutor(OrderExecutor):
-    """Dry-run executor: tidak kirim order ke exchange, hanya simulasi accepted/rejected."""
+    """Dry-run executor dengan order lifecycle state machine sederhana."""
 
     def __init__(self, max_notional_usd: float = 1000.0, ledger: CSVOrderLedger | None = None):
         self.max_notional_usd = max_notional_usd
         self.ledger = ledger
+        self.orders: dict[str, ExecutionResult] = {}
 
     def submit_order(self, request: OrderRequest) -> ExecutionResult:
         now = datetime.now(timezone.utc).isoformat()
@@ -56,9 +81,10 @@ class PaperExecutor(OrderExecutor):
             self._log(request, result)
             return result
 
+        order_id = f"paper-{uuid.uuid4()}"
         result = ExecutionResult(
             accepted=True,
-            order_id=f"paper-{uuid.uuid4()}",
+            order_id=order_id,
             status="ACCEPTED",
             message=(
                 f"Paper order accepted: side={request.side}, market={request.market_id}, "
@@ -66,8 +92,22 @@ class PaperExecutor(OrderExecutor):
             ),
             timestamp_utc=now,
         )
+        self.orders[order_id] = result
         self._log(request, result)
         return result
+
+    def cancel_order(self, order_id: str) -> ExecutionResult:
+        now = now_utc()
+        existing = self.orders.get(order_id)
+        if not existing:
+            return ExecutionResult(False, order_id, "UNKNOWN", "Order id tidak ditemukan", now)
+
+        canceled = ExecutionResult(True, order_id, "CANCELED", "Paper order canceled", now)
+        self.orders[order_id] = canceled
+        return canceled
+
+    def get_order_status(self, order_id: str) -> ExecutionResult:
+        return self.orders.get(order_id) or ExecutionResult(False, order_id, "UNKNOWN", "Order id tidak ditemukan", now_utc())
 
     def _log(self, request: OrderRequest, result: ExecutionResult) -> None:
         if not self.ledger:
@@ -87,11 +127,7 @@ class PaperExecutor(OrderExecutor):
 
 
 class LiveCLOBExecutor(OrderExecutor):
-    """Skeleton live executor untuk Polymarket CLOB.
-
-    - Jika API key tidak tersedia, fallback ke response 'LIVE_DISABLED'.
-    - Signing memakai HMAC sederhana sebagai placeholder integrasi auth.
-    """
+    """Live executor skeleton dengan granular error dan endpoint lifecycle dasar."""
 
     def __init__(self, api_cfg: APIConfig, ledger: CSVOrderLedger | None = None):
         self.api_cfg = api_cfg
@@ -104,58 +140,94 @@ class LiveCLOBExecutor(OrderExecutor):
             self._log(request, result)
             return result
 
+        payload = {
+            "market": request.market_id,
+            "side": request.side,
+            "price": request.price,
+            "size_usd": request.size_usd,
+            "idempotency_key": request.idempotency_key,
+        }
+        result = self._post_json(path="/orders", payload=payload)
+        self._log(request, result)
+        return result
+
+    def cancel_order(self, order_id: str) -> ExecutionResult:
+        if not self.api_cfg.polymarket_api_key:
+            return ExecutionResult(False, order_id, "LIVE_DISABLED", "POLYMARKET_API_KEY belum di-set.", now_utc())
+
+        return self._post_json(path=f"/orders/{order_id}/cancel", payload={"order_id": order_id}, forced_order_id=order_id)
+
+    def get_order_status(self, order_id: str) -> ExecutionResult:
+        if not self.api_cfg.polymarket_api_key:
+            return ExecutionResult(False, order_id, "LIVE_DISABLED", "POLYMARKET_API_KEY belum di-set.", now_utc())
+
+        now = now_utc()
         try:
-            payload = {
-                "market": request.market_id,
-                "side": request.side,
-                "price": request.price,
-                "size_usd": request.size_usd,
-                "idempotency_key": request.idempotency_key,
-            }
+            req = self._build_request(path=f"/orders/{order_id}", method="GET")
+            with urlopen(req, timeout=self.api_cfg.request_timeout_sec) as resp:
+                parsed = json.loads(resp.read().decode("utf-8"))
+            status = self._normalize_status(str(parsed.get("status", "UNKNOWN")))
+            return ExecutionResult(status in {"ACCEPTED", "PARTIAL_FILL", "FILLED"}, order_id, status, "Order status fetched", now)
+        except HTTPError as exc:
+            return ExecutionResult(False, order_id, "HTTP_ERROR", f"HTTP {exc.code}: {exc.reason}", now)
+        except URLError as exc:
+            return ExecutionResult(False, order_id, "NETWORK_ERROR", f"Network error: {exc.reason}", now)
+        except TimeoutError as exc:
+            return ExecutionResult(False, order_id, "TIMEOUT", f"Timeout: {exc}", now)
+        except Exception as exc:
+            return ExecutionResult(False, order_id, "FAILED", f"Live status failed: {exc}", now)
+
+    def _post_json(self, path: str, payload: dict, forced_order_id: str | None = None) -> ExecutionResult:
+        now = now_utc()
+        try:
             body = json.dumps(payload).encode("utf-8")
-            signature = self._sign(body)
-            req = Request(
-                f"{self.api_cfg.clob_base_url}/orders",
-                data=body,
-                headers={
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {self.api_cfg.polymarket_api_key}",
-                    "X-Signature": signature,
-                },
-                method="POST",
-            )
+            req = self._build_request(path=path, data=body, method="POST")
             with urlopen(req, timeout=self.api_cfg.request_timeout_sec) as resp:
                 parsed = json.loads(resp.read().decode("utf-8"))
 
-            result = ExecutionResult(
-                accepted=True,
-                order_id=str(parsed.get("order_id") or parsed.get("id") or f"live-{uuid.uuid4()}"),
-                status="ACCEPTED",
-                message="Live order submitted",
-                timestamp_utc=now,
-            )
-            self._log(request, result)
-            return result
+            order_id = forced_order_id or str(parsed.get("order_id") or parsed.get("id") or f"live-{uuid.uuid4()}")
+            status = self._normalize_status(str(parsed.get("status", "ACCEPTED")))
+            return ExecutionResult(status in {"ACCEPTED", "PARTIAL_FILL", "FILLED"}, order_id, status, "Live request submitted", now)
         except HTTPError as exc:
-            result = ExecutionResult(False, None, "HTTP_ERROR", f"HTTP {exc.code}: {exc.reason}", now)
-            self._log(request, result)
-            return result
+            return ExecutionResult(False, forced_order_id, "HTTP_ERROR", f"HTTP {exc.code}: {exc.reason}", now)
         except URLError as exc:
-            result = ExecutionResult(False, None, "NETWORK_ERROR", f"Network error: {exc.reason}", now)
-            self._log(request, result)
-            return result
+            return ExecutionResult(False, forced_order_id, "NETWORK_ERROR", f"Network error: {exc.reason}", now)
         except TimeoutError as exc:
-            result = ExecutionResult(False, None, "TIMEOUT", f"Timeout: {exc}", now)
-            self._log(request, result)
-            return result
+            return ExecutionResult(False, forced_order_id, "TIMEOUT", f"Timeout: {exc}", now)
         except Exception as exc:
-            result = ExecutionResult(False, None, "FAILED", f"Live submit failed: {exc}", now)
-            self._log(request, result)
-            return result
+            return ExecutionResult(False, forced_order_id, "FAILED", f"Live submit failed: {exc}", now)
+
+    def _build_request(self, path: str, data: bytes | None = None, method: str = "POST") -> Request:
+        payload = data or b""
+        signature = self._sign(payload)
+        return Request(
+            f"{self.api_cfg.clob_base_url}{path}",
+            data=data,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_cfg.polymarket_api_key}",
+                "X-Signature": signature,
+            },
+            method=method,
+        )
 
     def _sign(self, payload: bytes) -> str:
         secret = (self.api_cfg.polymarket_api_key or "").encode("utf-8")
         return hmac.new(secret, payload, hashlib.sha256).hexdigest()
+
+    def _normalize_status(self, status: str) -> OrderStatus:
+        normalized = status.upper()
+        mapping = {
+            "OPEN": "ACCEPTED",
+            "NEW": "NEW",
+            "ACCEPTED": "ACCEPTED",
+            "PARTIAL_FILL": "PARTIAL_FILL",
+            "FILLED": "FILLED",
+            "CANCELED": "CANCELED",
+            "REJECTED": "REJECTED",
+            "FAILED": "FAILED",
+        }
+        return mapping.get(normalized, "UNKNOWN")
 
     def _log(self, request: OrderRequest, result: ExecutionResult) -> None:
         if not self.ledger:
@@ -221,7 +293,7 @@ class ResilientExecutor(OrderExecutor):
                 self._idempotency_cache[request.idempotency_key] = result
                 return result
 
-            if result.status == "REJECTED":
+            if result.status in {"REJECTED", "LIVE_DISABLED", "HTTP_ERROR"}:
                 self._register_failure(now_ts)
                 return result
 
@@ -236,6 +308,12 @@ class ResilientExecutor(OrderExecutor):
             message="Unknown executor failure",
             timestamp_utc=datetime.now(timezone.utc).isoformat(),
         )
+
+    def cancel_order(self, order_id: str) -> ExecutionResult:
+        return self.inner.cancel_order(order_id)
+
+    def get_order_status(self, order_id: str) -> ExecutionResult:
+        return self.inner.get_order_status(order_id)
 
     def _is_circuit_open(self, now_ts: float) -> bool:
         if self._circuit_opened_at is None:

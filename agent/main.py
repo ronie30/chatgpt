@@ -22,6 +22,8 @@ def main() -> None:
     parser.add_argument("--execute", action="store_true", help="Execute decision via selected executor")
     parser.add_argument("--executor", choices=["paper", "live"], default="paper", help="Executor backend")
     parser.add_argument("--ledger-path", default="artifacts/order_ledger.csv", help="Order ledger CSV path")
+    parser.add_argument("--cancel-order-id", help="Cancel existing order id")
+    parser.add_argument("--status-order-id", help="Get status for existing order id")
     args = parser.parse_args()
 
     if args.backtest_file:
@@ -70,6 +72,18 @@ def main() -> None:
         selected_executor = ResilientExecutor(inner=paper, max_retries=2, retry_backoff_sec=0.05)
 
     agent = TradingAgent(config=cfg, bankroll_usd=args.bankroll, executor=selected_executor)
+
+    if args.cancel_order_id:
+        result = selected_executor.cancel_order(args.cancel_order_id)
+        print("=== Cancel Result ===")
+        print(asdict(result))
+        return
+
+    if args.status_order_id:
+        result = selected_executor.get_order_status(args.status_order_id)
+        print("=== Order Status ===")
+        print(asdict(result))
+        return
 
     if args.execute:
         result = agent.execute_market(args.market_id)

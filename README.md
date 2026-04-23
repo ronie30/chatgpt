@@ -119,3 +119,12 @@ python -m agent.main --market-id <POLYMARKET_MARKET_ID> --execute --executor liv
 
 Semua eksekusi dicatat ke order ledger CSV (`--ledger-path`, default `artifacts/order_ledger.csv`).
 Jika `POLYMARKET_API_KEY` belum di-set, live executor akan mengembalikan status `LIVE_DISABLED` (safe-fail).
+
+
+Lifecycle command contoh:
+
+```bash
+python -m agent.main --market-id <POLYMARKET_MARKET_ID> --execute --executor paper
+python -m agent.main --market-id <POLYMARKET_MARKET_ID> --status-order-id <ORDER_ID> --executor paper
+python -m agent.main --market-id <POLYMARKET_MARKET_ID> --cancel-order-id <ORDER_ID> --executor paper
+```
