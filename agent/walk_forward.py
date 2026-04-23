@@ -1,8 +1,10 @@
 from dataclasses import dataclass
 
+from .calibration import fit_regime_calibrator
 from .config import AgentConfig
 from .dataset_io import load_labeled_bundles
 from .metrics import brier_score
+from .regime import detect_regime
 from .strategy import estimate_fair_probability
 from .tuning import tune_thresholds_rows
 
@@ -56,6 +58,17 @@ def run_walk_forward(
 
         tuned = tune_thresholds_rows(train_slice, config=cfg)
 
+        train_regimes: list[str] = []
+        train_probabilities: list[float] = []
+        train_outcomes: list[int] = []
+        for train_bundle, train_outcome in train_slice:
+            fair_train, _, train_features = estimate_fair_probability(train_bundle, cfg.strategy)
+            train_regimes.append(detect_regime(train_bundle, train_features).label)
+            train_probabilities.append(fair_train)
+            train_outcomes.append(train_outcome)
+
+        calibrator = fit_regime_calibrator(train_regimes, train_probabilities, train_outcomes)
+
         predictions: list[float] = []
         outcomes: list[int] = []
         trades = 0
@@ -64,10 +77,12 @@ def run_walk_forward(
 
         for bundle, outcome in test_slice:
             fair, confidence, features = estimate_fair_probability(bundle, cfg.strategy)
-            edge = fair - bundle.implied_probability
+            regime = detect_regime(bundle, features)
+            fair_calibrated = calibrator.calibrate(regime.label, fair)
+            edge = fair_calibrated - bundle.implied_probability
             ev_bps = edge * 10_000
 
-            predictions.append(fair)
+            predictions.append(fair_calibrated)
             outcomes.append(outcome)
 
             if features.source_health < 0.34 or features.liquidity_score < cfg.risk.min_liquidity_score:
