@@ -50,7 +50,7 @@ Output berisi:
 
 ## Backtest & Calibration
 
-Anda bisa evaluasi kualitas prediksi historis dengan CSV offline:
+Anda dapat mengevaluasi kualitas prediksi historis dengan CSV offline:
 
 ```bash
 python -m agent.main --backtest-file tests/data/backtest_sample.csv
