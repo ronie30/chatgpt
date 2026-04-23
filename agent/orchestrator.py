@@ -11,6 +11,7 @@ from .execution import (
     decision_to_order_request,
 )
 from .models import TradeDecision
+from .observability import NullObserver
 from .quality import DataQualityGuard
 from .regime import detect_regime
 from .risk import kelly_size_usd
@@ -29,6 +30,7 @@ class TradingAgent:
         config: AgentConfig | None = None,
         bankroll_usd: float = 1000.0,
         executor: OrderExecutor | None = None,
+        observer=None,
     ):
         self.cfg = config or AgentConfig()
         self.client = PolymarketDataClient(api_cfg=self.cfg.api)
@@ -41,6 +43,7 @@ class TradingAgent:
             circuit_cooldown_sec=5.0,
         )
         self.quality_guard = DataQualityGuard(window=50)
+        self.observer = observer or NullObserver()
 
     def evaluate_market(self, market_id: str) -> TradeDecision:
         data = self.client.fetch_data_bundle(market_id)
@@ -56,6 +59,7 @@ class TradingAgent:
         )
 
         if quality.quality_score < 0.50:
+            self.observer.inc("quality_gate_holds")
             return TradeDecision(
                 market_id=market_id,
                 signal="HOLD",
@@ -73,6 +77,7 @@ class TradingAgent:
             )
 
         if features.source_health < 0.34:
+            self.observer.inc("source_health_holds")
             return TradeDecision(
                 market_id=market_id,
                 signal="HOLD",
@@ -87,6 +92,7 @@ class TradingAgent:
             )
 
         if features.liquidity_score < self.cfg.risk.min_liquidity_score:
+            self.observer.inc("liquidity_holds")
             return TradeDecision(
                 market_id=market_id,
                 signal="HOLD",
@@ -105,6 +111,7 @@ class TradingAgent:
             or abs(edge) < self.cfg.strategy.edge_threshold
             or abs(expected_value_bps) < self.cfg.risk.min_expected_value_bps
         ):
+            self.observer.inc("threshold_holds")
             return TradeDecision(
                 market_id=market_id,
                 signal="HOLD",
@@ -132,6 +139,7 @@ class TradingAgent:
         )
         size *= regime.risk_multiplier
 
+        self.observer.inc("signals_generated")
         return TradeDecision(
             market_id=market_id,
             signal=signal,

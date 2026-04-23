@@ -4,6 +4,7 @@ from dataclasses import asdict
 from .backtest import run_backtest
 from .config import AgentConfig
 from .execution import LiveCLOBExecutor, PaperExecutor, ResilientExecutor
+from .observability import ObservabilityStack
 from .order_ledger import CSVOrderLedger
 from .orchestrator import TradingAgent
 from .tuning import tune_thresholds
@@ -24,6 +25,7 @@ def main() -> None:
     parser.add_argument("--ledger-path", default="artifacts/order_ledger.csv", help="Order ledger CSV path")
     parser.add_argument("--cancel-order-id", help="Cancel existing order id")
     parser.add_argument("--status-order-id", help="Get status for existing order id")
+    parser.add_argument("--metrics-snapshot", action="store_true", help="Print metrics/alerts snapshot")
     args = parser.parse_args()
 
     if args.backtest_file:
@@ -58,15 +60,23 @@ def main() -> None:
         return
 
     cfg = AgentConfig()
+    obs = ObservabilityStack()
     ledger = CSVOrderLedger(path=args.ledger_path)
     if args.executor == "live":
-        live = LiveCLOBExecutor(api_cfg=cfg.api, ledger=ledger)
+        live = LiveCLOBExecutor(api_cfg=cfg.api, ledger=ledger, observer=obs)
         selected_executor = ResilientExecutor(inner=live, max_retries=1, retry_backoff_sec=0.2)
     else:
-        paper = PaperExecutor(max_notional_usd=cfg.risk.max_position_usd, ledger=ledger)
+        paper = PaperExecutor(max_notional_usd=cfg.risk.max_position_usd, ledger=ledger, observer=obs)
         selected_executor = ResilientExecutor(inner=paper, max_retries=2, retry_backoff_sec=0.05)
 
-    agent = TradingAgent(config=cfg, bankroll_usd=args.bankroll, executor=selected_executor)
+    agent = TradingAgent(config=cfg, bankroll_usd=args.bankroll, executor=selected_executor, observer=obs)
+
+    if args.metrics_snapshot:
+        print("=== Metrics Snapshot ===")
+        print(obs.metrics.snapshot())
+        print("=== Alerts ===")
+        print(obs.alert_messages())
+        return
 
     if args.cancel_order_id:
         result = selected_executor.cancel_order(args.cancel_order_id)

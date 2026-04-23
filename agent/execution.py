@@ -11,6 +11,7 @@ from urllib.request import Request, urlopen
 
 from .config import APIConfig
 from .models import TradeDecision
+from .observability import NullObserver
 from .order_ledger import CSVOrderLedger, LedgerEntry, now_utc
 
 
@@ -63,10 +64,11 @@ class OrderExecutor:
 class PaperExecutor(OrderExecutor):
     """Dry-run executor dengan order lifecycle state machine sederhana."""
 
-    def __init__(self, max_notional_usd: float = 1000.0, ledger: CSVOrderLedger | None = None):
+    def __init__(self, max_notional_usd: float = 1000.0, ledger: CSVOrderLedger | None = None, observer=None):
         self.max_notional_usd = max_notional_usd
         self.ledger = ledger
         self.orders: dict[str, ExecutionResult] = {}
+        self.observer = observer or NullObserver()
 
     def submit_order(self, request: OrderRequest) -> ExecutionResult:
         now = datetime.now(timezone.utc).isoformat()
@@ -74,11 +76,13 @@ class PaperExecutor(OrderExecutor):
         if request.size_usd <= 0:
             result = ExecutionResult(False, None, "REJECTED", "size_usd harus > 0", now)
             self._log(request, result)
+            self.observer.inc("execution_failures")
             return result
 
         if request.size_usd > self.max_notional_usd:
             result = ExecutionResult(False, None, "REJECTED", "Melebihi max_notional_usd executor", now)
             self._log(request, result)
+            self.observer.inc("execution_failures")
             return result
 
         order_id = f"paper-{uuid.uuid4()}"
@@ -94,6 +98,7 @@ class PaperExecutor(OrderExecutor):
         )
         self.orders[order_id] = result
         self._log(request, result)
+        self.observer.inc("execution_success")
         return result
 
     def cancel_order(self, order_id: str) -> ExecutionResult:
@@ -129,15 +134,17 @@ class PaperExecutor(OrderExecutor):
 class LiveCLOBExecutor(OrderExecutor):
     """Live executor skeleton dengan granular error dan endpoint lifecycle dasar."""
 
-    def __init__(self, api_cfg: APIConfig, ledger: CSVOrderLedger | None = None):
+    def __init__(self, api_cfg: APIConfig, ledger: CSVOrderLedger | None = None, observer=None):
         self.api_cfg = api_cfg
         self.ledger = ledger
+        self.observer = observer or NullObserver()
 
     def submit_order(self, request: OrderRequest) -> ExecutionResult:
         now = now_utc()
         if not self.api_cfg.polymarket_api_key:
             result = ExecutionResult(False, None, "LIVE_DISABLED", "POLYMARKET_API_KEY belum di-set.", now)
             self._log(request, result)
+            self.observer.inc("execution_failures")
             return result
 
         payload = {
@@ -149,6 +156,10 @@ class LiveCLOBExecutor(OrderExecutor):
         }
         result = self._post_json(path="/orders", payload=payload)
         self._log(request, result)
+        if result.accepted:
+            self.observer.inc("execution_success")
+        else:
+            self.observer.inc("execution_failures")
         return result
 
     def cancel_order(self, order_id: str) -> ExecutionResult:
@@ -189,12 +200,16 @@ class LiveCLOBExecutor(OrderExecutor):
             status = self._normalize_status(str(parsed.get("status", "ACCEPTED")))
             return ExecutionResult(status in {"ACCEPTED", "PARTIAL_FILL", "FILLED"}, order_id, status, "Live request submitted", now)
         except HTTPError as exc:
+            self.observer.inc("execution_failures")
             return ExecutionResult(False, forced_order_id, "HTTP_ERROR", f"HTTP {exc.code}: {exc.reason}", now)
         except URLError as exc:
+            self.observer.inc("execution_failures")
             return ExecutionResult(False, forced_order_id, "NETWORK_ERROR", f"Network error: {exc.reason}", now)
         except TimeoutError as exc:
+            self.observer.inc("execution_failures")
             return ExecutionResult(False, forced_order_id, "TIMEOUT", f"Timeout: {exc}", now)
         except Exception as exc:
+            self.observer.inc("execution_failures")
             return ExecutionResult(False, forced_order_id, "FAILED", f"Live submit failed: {exc}", now)
 
     def _build_request(self, path: str, data: bytes | None = None, method: str = "POST") -> Request:

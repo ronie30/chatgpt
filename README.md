@@ -128,3 +128,22 @@ python -m agent.main --market-id <POLYMARKET_MARKET_ID> --execute --executor pap
 python -m agent.main --status-order-id <ORDER_ID> --executor paper
 python -m agent.main --cancel-order-id <ORDER_ID> --executor paper
 ```
+
+
+## Observability Production Stack
+
+CLI mendukung snapshot metrik + alert sederhana:
+
+```bash
+python -m agent.main --market-id <POLYMARKET_MARKET_ID> --metrics-snapshot
+```
+
+Data observability mencakup structured events (`artifacts/agent_events.jsonl`), counter/histogram metrics, dan alert rules berbasis threshold.
+
+## Integration Test Endpoint Nyata (Opt-in)
+
+```bash
+RUN_LIVE_INTEGRATION=1 LIVE_TEST_MARKET=<MARKET_ID> pytest -q tests/integration/test_live_endpoint_integration.py
+```
+
+Test ini sengaja opt-in agar aman dijalankan di CI tanpa credential.
