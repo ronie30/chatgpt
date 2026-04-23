@@ -8,6 +8,7 @@ from .observability import ObservabilityStack
 from .order_ledger import CSVOrderLedger
 from .orchestrator import TradingAgent
 from .tuning import tune_thresholds
+from .copy_trading import top_wallets_for_copy_trading
 from .walk_forward import run_walk_forward
 
 
@@ -26,7 +27,17 @@ def main() -> None:
     parser.add_argument("--cancel-order-id", help="Cancel existing order id")
     parser.add_argument("--status-order-id", help="Get status for existing order id")
     parser.add_argument("--metrics-snapshot", action="store_true", help="Print metrics/alerts snapshot")
+    parser.add_argument("--top-wallets", action="store_true", help="Show top 5 wallets for copy trading")
     args = parser.parse_args()
+
+    cfg = AgentConfig()
+
+    if args.top_wallets:
+        wallets = top_wallets_for_copy_trading(cfg.api, top_n=5)
+        print("=== Top 5 Copy Trading Wallets ===")
+        for i, w in enumerate(wallets, start=1):
+            print(f"{i}. {w.wallet} | win_rate={w.win_rate:.2%} | pnl=${w.realized_pnl_usd:,.0f} | score={w.decision_score:.3f}")
+        return
 
     if args.backtest_file:
         summary, curve_rows = run_backtest(args.backtest_file)
@@ -59,7 +70,6 @@ def main() -> None:
             print(asdict(fold))
         return
 
-    cfg = AgentConfig()
     obs = ObservabilityStack()
     ledger = CSVOrderLedger(path=args.ledger_path)
     if args.executor == "live":

@@ -147,3 +147,14 @@ RUN_LIVE_INTEGRATION=1 LIVE_TEST_MARKET=<MARKET_ID> pytest -q tests/integration/
 ```
 
 Test ini sengaja opt-in agar aman dijalankan di CI tanpa credential.
+
+
+## Top 5 Wallet Copy Trading (Metode Tambahan)
+
+Untuk melihat 5 wallet dengan winrate/performa terbaik (risk-adjusted scoring):
+
+```bash
+python -m agent.main --top-wallets
+```
+
+Skor keputusan wallet dihitung secara kompleks dari kombinasi: realized PnL, Sharpe, max drawdown, win-rate, recency, consistency, dan penalti overfit (trade depth rendah).
