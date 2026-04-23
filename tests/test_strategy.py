@@ -4,8 +4,8 @@ from agent.models import OrderBookSnapshot
 from agent.strategy import estimate_fair_probability
 
 
-def test_estimate_fair_probability_in_range():
-    data = DataBundle(
+def _bundle(sentiment: float, news: float, onchain: float) -> DataBundle:
+    return DataBundle(
         implied_probability=0.55,
         orderbook=OrderBookSnapshot(
             best_bid=0.54,
@@ -14,9 +14,9 @@ def test_estimate_fair_probability_in_range():
             bid_depth=2000,
             ask_depth=1500,
         ),
-        sentiment_score=0.4,
-        news_score=0.2,
-        onchain_flow_score=0.1,
+        sentiment_score=sentiment,
+        news_score=news,
+        onchain_flow_score=onchain,
         diagnostics=SourceDiagnostics(
             gamma_ok=True,
             clob_ok=True,
@@ -26,10 +26,20 @@ def test_estimate_fair_probability_in_range():
             onchain_ok=True,
         ),
     )
-    fair, conf, _ = estimate_fair_probability(data, StrategyConfig())
 
+
+def test_estimate_fair_probability_in_range():
+    fair, conf, _ = estimate_fair_probability(_bundle(0.4, 0.2, 0.1), StrategyConfig())
     assert 0.01 <= fair <= 0.99
     assert 0.0 <= conf <= 1.0
+
+
+def test_disagreement_penalizes_confidence():
+    fair_a, conf_a, _ = estimate_fair_probability(_bundle(0.6, 0.6, 0.6), StrategyConfig())
+    fair_b, conf_b, _ = estimate_fair_probability(_bundle(0.9, -0.9, 0.9), StrategyConfig())
+
+    assert conf_a > conf_b
+    assert fair_a != fair_b
 
 
 def test_lexicon_sentiment_detects_positive_and_negative():

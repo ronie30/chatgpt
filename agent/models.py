@@ -25,6 +25,8 @@ class MarketFeatures:
     orderflow_imbalance: float
     liquidity_score: float
     confidence: float
+    disagreement_penalty: float
+    source_health: float
 
 
 @dataclass
@@ -35,4 +37,6 @@ class TradeDecision:
     edge: float
     size_usd: float
     confidence: float
+    expected_value_bps: float
+    source_health: float
     rationale: str

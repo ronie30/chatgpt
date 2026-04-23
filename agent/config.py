@@ -31,6 +31,8 @@ class RiskConfig:
     kelly_fraction_cap: float = float(os.getenv("KELLY_FRACTION_CAP", "0.25"))
     min_confidence: float = float(os.getenv("MIN_CONFIDENCE", "0.60"))
     max_drawdown_stop: float = float(os.getenv("MAX_DRAWDOWN_STOP", "0.10"))
+    min_expected_value_bps: float = float(os.getenv("MIN_EXPECTED_VALUE_BPS", "40"))
+    min_liquidity_score: float = float(os.getenv("MIN_LIQUIDITY_SCORE", "0.40"))
 
 
 @dataclass
@@ -40,6 +42,10 @@ class StrategyConfig:
     onchain_weight: float = float(os.getenv("ONCHAIN_WEIGHT", "0.25"))
     orderflow_weight: float = float(os.getenv("ORDERFLOW_WEIGHT", "0.35"))
     news_weight: float = float(os.getenv("NEWS_WEIGHT", "0.20"))
+
+    prior_strength: float = float(os.getenv("PRIOR_STRENGTH", "0.55"))
+    disagreement_penalty_weight: float = float(os.getenv("DISAGREEMENT_PENALTY_WEIGHT", "0.35"))
+    entropy_penalty_weight: float = float(os.getenv("ENTROPY_PENALTY_WEIGHT", "0.20"))
 
 
 @dataclass

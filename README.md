@@ -1,75 +1,46 @@
-# Professional Polymarket Trading Agent
+# Professional Polymarket Trading Agent (High-Trust Architecture)
 
-Agent ini adalah fondasi **professional-grade decision engine** untuk market Polymarket dengan pendekatan multi-sumber data, analytics, dan risk management.
+Agent ini dirancang untuk menghasilkan keputusan trading yang **lebih akurat, robust, dan dapat diaudit** melalui:
 
-## Cakupan Sumber Data (Prioritas)
+- Multi-source data fusion (Gamma, CLOB, Data API, Twitter, News, forensic chain logs).
+- Probabilistic inference dengan prior market + signal posterior.
+- Quality gates (source health, liquidity, expected value, confidence).
+- Risk sizing berbasis Kelly cap + batas exposure.
 
-1. **Polymarket Gamma API** (market metadata/event/search)
-2. **Polymarket CLOB API** (orderbook dan harga)
-3. **Polymarket Data API** (volume/open interest)
-4. **Polymarket WebSocket** (siap ditambahkan untuk streaming live)
-5. **On-chain analytics** (Dune/Goldsky/Allium)
-6. **Polygonscan/Etherscan** (forensic logs)
-7. **Twitter API** (sentimen real-time)
-8. **News API / RSS** (sentimen berita)
-9. **Google Trends / GDELT** (opsional, bisa ditambah sebagai feature baru)
+## Komponen Utama
 
-> Implementasi saat ini sudah berisi REST connector nyata dengan fallback aman (deterministic simulation) agar agent tetap berjalan ketika API unavailable.
+- `agent/data_sources.py`: connector REST nyata + deterministic fallback + diagnostics.
+- `agent/strategy.py`: posterior fair probability dengan disagreement/entropy penalty.
+- `agent/feature_engineering.py`: liquidity, entropy, dan feature normalization.
+- `agent/orchestrator.py`: decision engine BUY/SELL/HOLD dengan quality gate berlapis.
+- `agent/risk.py`: sizing yang konservatif dan bounded.
 
-## Arsitektur
+## Data Sources Prioritas
 
-- `agent/config.py`: konfigurasi endpoint + API key.
-- `agent/data_sources.py`: connector HTTP, sentiment scorer, forensic score, diagnostics kesehatan sumber data.
-- `agent/strategy.py`: ensemble scoring untuk estimasi fair probability + confidence.
-- `agent/risk.py`: position sizing (capped Kelly).
-- `agent/orchestrator.py`: keputusan BUY/SELL/HOLD dengan penalti confidence berbasis kesehatan sumber data.
-- `agent/main.py`: CLI runner.
+1. Polymarket Gamma API
+2. Polymarket CLOB API / WebSocket
+3. Polymarket Data API
+4. On-chain analytics (Dune/Goldsky/Allium)
+5. Polygonscan / Etherscan
+6. Twitter API
+7. News API / RSS
+8. Google Trends / GDELT (opsional)
 
-## Setup API Key
+## Setup
 
-Salin env berikut ke shell/secret manager:
-
-```bash
-export POLYMARKET_API_KEY="..."
-export TWITTER_BEARER_TOKEN="..."
-export NEWS_API_KEY="..."
-export POLYGONSCAN_API_KEY="..."
-export ETHERSCAN_API_KEY="..."
-export DUNE_API_KEY="..."
-export GOLDSKY_API_KEY="..."
-export ALLIUM_API_KEY="..."
-```
-
-Opsional override endpoint:
-
-```bash
-export GAMMA_BASE_URL="https://gamma-api.polymarket.com"
-export CLOB_BASE_URL="https://clob.polymarket.com"
-export DATA_API_BASE_URL="https://data-api.polymarket.com"
-```
-
-## Menjalankan Agent
+Gunakan `.env.example` lalu isi semua API key yang tersedia.
 
 ```bash
 python -m agent.main --market-id <POLYMARKET_MARKET_ID> --bankroll 1000
 ```
 
-Output:
-- `signal`: BUY / SELL / HOLD
-- `target_price`: fair probability
-- `edge`: selisih fair vs implied
-- `size_usd`: rekomendasi ukuran posisi
-- `confidence`: confidence efektif (setelah penalti source health)
-- `rationale`: ringkasan alasan sinyal
+Output berisi:
+- `signal`, `target_price`, `edge`, `size_usd`
+- `confidence`, `expected_value_bps`, `source_health`
+- `rationale` untuk audit keputusan
 
-## Production Hardening (Next Step)
+## Catatan Profesional
 
-- Integrasikan websocket listener untuk last trade + best bid/ask streaming.
-- Tambahkan order execution signer + auth flow resmi Polymarket CLOB.
-- Simpan semua snapshot ke time-series DB untuk backtest dan model retraining.
-- Tambah monitoring (latensi API, hit ratio sinyal, drawdown, slippage).
-- Jalankan paper trading minimal 2–4 minggu sebelum live.
-
-## Disclaimer
-
-Agent ini alat bantu analitik/trading automation. Tidak menjamin profit dan tetap memerlukan validasi strategi, manajemen risiko, serta kepatuhan regulasi di yurisdiksi Anda.
+- "Akurasi sangat tinggi" dicapai lewat kombinasi data quality + kalibrasi model + evaluasi berulang, bukan dari satu formula.
+- Lakukan paper trading dan calibration period sebelum live deployment.
+- Sistem ini adalah decision engine; tetap butuh governance, monitoring, dan risk review manusia.

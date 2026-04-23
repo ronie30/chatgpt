@@ -41,3 +41,34 @@ def test_agent_holds_when_source_health_low_even_with_edge():
 
     assert decision.signal == "HOLD"
     assert decision.size_usd == 0.0
+
+
+def test_agent_holds_when_liquidity_too_low():
+    bundle = DataBundle(
+        implied_probability=0.48,
+        orderbook=OrderBookSnapshot(
+            best_bid=0.30,
+            best_ask=0.60,
+            last_trade_price=0.45,
+            bid_depth=50,
+            ask_depth=60,
+        ),
+        sentiment_score=0.6,
+        news_score=0.6,
+        onchain_flow_score=0.6,
+        diagnostics=SourceDiagnostics(
+            gamma_ok=True,
+            clob_ok=True,
+            data_api_ok=True,
+            twitter_ok=True,
+            news_ok=True,
+            onchain_ok=True,
+        ),
+    )
+    agent = TradingAgent(config=AgentConfig(), bankroll_usd=1000)
+    agent.client = StubClient(bundle)
+
+    decision = agent.evaluate_market("m2")
+
+    assert decision.signal == "HOLD"
+    assert "Likuiditas" in decision.rationale
