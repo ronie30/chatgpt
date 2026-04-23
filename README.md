@@ -44,3 +44,15 @@ Output berisi:
 - "Akurasi sangat tinggi" dicapai lewat kombinasi data quality + kalibrasi model + evaluasi berulang, bukan dari satu formula.
 - Lakukan paper trading dan calibration period sebelum live deployment.
 - Sistem ini adalah decision engine; tetap butuh governance, monitoring, dan risk review manusia.
+
+
+## Backtest & Calibration
+
+Anda bisa evaluasi kualitas prediksi historis dengan CSV offline:
+
+```bash
+python -m agent.main --backtest-file tests/data/backtest_sample.csv
+```
+
+Kolom minimal CSV: `implied_probability`, orderbook fields, score fields, diagnostics flags, dan `outcome` (0/1).
+Output mencakup `brier`, `logloss`, rata-rata confidence/edge, serta calibration curve 10-bin.
