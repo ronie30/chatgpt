@@ -176,3 +176,10 @@ Skor keputusan wallet dihitung secara kompleks dari kombinasi: realized PnL, Sha
 Versi ini memindahkan beberapa konstanta hard-coded ke konfigurasi environment: quality z-threshold, regime thresholds/multipliers, strategy penalty scale, confidence blend weights, source-health gate, dan tuning score weights.
 Selain itu, utilitas matematis kecil (`clip/sigmoid/logit/depth_imbalance`) dan helper sentiment lexicon kini dipusatkan agar konsisten lintas modul.
 
+
+
+## CI Troubleshooting
+
+Jika status run menunjukkan pesan seperti **"job was not started because your account is locked due to a billing issue"**, berarti job belum dijalankan di runner (bukan karena assert test gagal).
+
+Lihat panduan singkat di `.github/CI_TROUBLESHOOTING.md`.
