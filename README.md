@@ -183,3 +183,8 @@ Selain itu, utilitas matematis kecil (`clip/sigmoid/logit/depth_imbalance`) dan 
 Jika status run menunjukkan pesan seperti **"job was not started because your account is locked due to a billing issue"**, berarti job belum dijalankan di runner (bukan karena assert test gagal).
 
 Lihat panduan singkat di `.github/CI_TROUBLESHOOTING.md`.
+
+
+## Rencana Eksekusi 7 Hari
+
+Untuk rencana implementasi terstruktur mingguan (task harian + acceptance criteria), lihat `EXECUTION_PLAN_7_DAYS.md`.
